@@ -119,7 +119,7 @@ You can run **Citations Made Easy** locally on your computer or home server usin
 
 #### 1. Clone & Install
 ```bash
-git clone https://github.com/YOUR_USERNAME/citations-made-easy.git
+git clone https://github.com/raviwarrier/citations-made-easy.git
 cd citations-made-easy
 npm install
 ```
