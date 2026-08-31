@@ -1,0 +1,6 @@
+{
+  "name": "Citations Made Easy",
+  "description": "Minimalist, local-first research reader for PDFs, EPUBs, and articles with automatic multi-style citation generation, context scanning, and reference exports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

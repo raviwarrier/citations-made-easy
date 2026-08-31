@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  citations-reader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: citations-made-easy
+    restart: unless-stopped
+    # Security hardening: Bind port strictly to localhost (127.0.0.1) to prevent external LAN access
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
