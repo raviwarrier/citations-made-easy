@@ -16,7 +16,8 @@ import { generateSamplePdfBuffer } from './utils/samplePdfGenerator';
 import { 
   loadActiveDocumentSession, 
   saveActiveDocumentSession, 
-  saveActivePagePosition 
+  saveActivePagePosition,
+  clearActiveDocumentSession
 } from './utils/documentStorage';
 import { querySqliteCitations, saveCitationToSqlite, deleteCitationFromSqlite } from './utils/sqliteDb';
 
@@ -209,6 +210,19 @@ export default function App() {
     setCurrentPage(targetPage);
     saveActiveDocumentSession(doc, targetPage);
   };
+
+  // Close currently opened document and return to the opening screen
+  const handleCloseDocument = useCallback(async () => {
+    setActiveDocument(null);
+    setCurrentPage(1);
+    setSelectionData(null);
+    setPendingPostItData(null);
+    setJumpHistory(null);
+    setSelectedCitationId(null);
+    window.getSelection()?.removeAllRanges();
+    await clearActiveDocumentSession();
+    showToast('Document closed. Returned to opening screen.');
+  }, []);
 
   // Trigger Citation Capture: Opens Pastel Yellow Post-It Note (Requirement 2)
   const handleExtractSelection = useCallback(() => {
@@ -472,6 +486,11 @@ export default function App() {
       } else if (e.key === 't' || e.key === 'T') {
         e.preventDefault();
         cycleTheme();
+      } else if (e.key === 'w' || e.key === 'W') {
+        if (activeDocument) {
+          e.preventDefault();
+          handleCloseDocument();
+        }
       } else if (e.key === 'o' || e.key === 'O') {
         e.preventDefault();
         setIsDocPickerOpen(true);
@@ -497,6 +516,7 @@ export default function App() {
     handleExtractSelection,
     handleQuickCopySelection,
     handleScanContext,
+    handleCloseDocument,
     handleUpdateSettings,
     cycleTheme,
     refreshRepositoryCitations,
@@ -528,6 +548,7 @@ export default function App() {
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
           onOpenDocumentPicker={() => setIsDocPickerOpen(true)}
+          onCloseDocument={handleCloseDocument}
           onOpenRepository={() => {
             refreshRepositoryCitations();
             setIsRepositoryOpen(true);
@@ -561,6 +582,7 @@ export default function App() {
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
             onOpenDocumentPicker={() => setIsDocPickerOpen(true)}
+            onCloseDocument={handleCloseDocument}
             onOpenExportModal={() => setIsExportModalOpen(true)}
             onClose={() => setIsMetaSidebarOpen(false)}
           />
@@ -579,6 +601,12 @@ export default function App() {
             setIsSidebarOpen(true);
           }}
           onOpenDocumentPicker={() => setIsDocPickerOpen(true)}
+          onSelectDocument={handleSelectDocument}
+          onOpenRepository={() => {
+            refreshRepositoryCitations();
+            setIsRepositoryOpen(true);
+          }}
+          allRepositoryCitationsCount={allRepositoryCitations.length}
           jumpHistory={jumpHistory}
           onResumePreviousPosition={handleResumePreviousPosition}
           targetHighlightQuote={jumpHistory?.quoteText}
@@ -631,6 +659,7 @@ export default function App() {
           onOpenExportModal={() => setIsExportModalOpen(true)}
           onToggleMetadata={() => setIsMetaSidebarOpen((v) => !v)}
           citationCount={citations.length}
+          hasActiveDoc={Boolean(activeDocument)}
           theme={settings.theme}
         />
       )}

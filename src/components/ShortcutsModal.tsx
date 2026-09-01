@@ -27,6 +27,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({
         { keys: ['F'], desc: 'Toggle Distraction-Free Focus Mode' },
         { keys: ['T'], desc: 'Cycle Reading Themes (Paper / Sepia / Slate / Onyx)' },
         { keys: ['O'], desc: 'Open / Upload Document Modal' },
+        { keys: ['W'], desc: 'Close Active Document (Return to opening screen)' },
       ],
     },
     {

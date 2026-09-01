@@ -11,7 +11,8 @@ import {
   HelpCircle,
   Download,
   Sidebar,
-  Database
+  Database,
+  X
 } from 'lucide-react';
 import { FontChoice, ReadingTheme, ReaderSettings, ResearchDocument } from '../types';
 import { THEMES } from '../utils/themeStyles';
@@ -21,6 +22,7 @@ interface ReaderHeaderProps {
   settings: ReaderSettings;
   onUpdateSettings: (settings: Partial<ReaderSettings>) => void;
   onOpenDocumentPicker: () => void;
+  onCloseDocument?: () => void;
   onOpenRepository?: () => void;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
@@ -40,6 +42,7 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
   settings,
   onUpdateSettings,
   onOpenDocumentPicker,
+  onCloseDocument,
   onOpenRepository,
   onToggleSidebar,
   isSidebarOpen,
@@ -65,8 +68,21 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
           title="Start Research / Open Document (O)"
         >
           <BookOpen className="w-3.5 h-3.5" />
-          <span>Start</span>
+          <span>{document ? 'Open...' : 'Start'}</span>
         </button>
+
+        {/* Close Document button when a document is currently opened */}
+        {document && onCloseDocument && (
+          <button
+            id="btn-close-document"
+            onClick={onCloseDocument}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-mono border transition shrink-0 cursor-pointer ${theme.btnSecondary} hover:bg-red-500/10 hover:text-red-400 hover:border-red-400/50 shadow-2xs`}
+            title="Close active document and return to start screen (W)"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span className="hidden xs:inline">Close</span>
+          </button>
+        )}
 
         {/* Toggle Metadata Sidebar (Accessible on mobile & desktop) */}
         {onToggleMetaSidebar && (
@@ -98,12 +114,14 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
         )}
 
         {document && (
-          <h1 
-            className="text-xs md:text-sm font-medium truncate max-w-[140px] xs:max-w-[200px] sm:max-w-[320px] md:max-w-[460px] italic opacity-90 hidden sm:block ml-1"
-            title={document.title}
-          >
-            {document.title}
-          </h1>
+          <div className="flex items-center gap-1.5 min-w-0 ml-1">
+            <h1 
+              className="text-xs md:text-sm font-medium truncate max-w-[140px] xs:max-w-[200px] sm:max-w-[300px] md:max-w-[420px] italic opacity-90 hidden sm:block"
+              title={document.title}
+            >
+              {document.title}
+            </h1>
+          </div>
         )}
       </div>
 

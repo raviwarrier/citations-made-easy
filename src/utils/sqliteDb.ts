@@ -15,7 +15,12 @@ export async function getSqliteDb(): Promise<Database> {
 
   initPromise = (async () => {
     const SQL = await initSqlJs({
-      locateFile: (file) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/${file}`,
+      locateFile: (file) => {
+        if (file.endsWith('.wasm')) {
+          return '/sql-wasm.wasm';
+        }
+        return `/${file}`;
+      },
     });
 
     let savedBinary: Uint8Array | null = null;

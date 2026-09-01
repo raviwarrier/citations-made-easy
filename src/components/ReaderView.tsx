@@ -13,11 +13,15 @@ import {
   Maximize2,
   Undo2,
   FileCode,
-  LayoutTemplate
+  LayoutTemplate,
+  BookOpen,
+  Database,
+  ArrowRight
 } from 'lucide-react';
 import { CitationEntry, DocumentPage, ReaderSettings, ResearchDocument } from '../types';
 import { THEMES } from '../utils/themeStyles';
 import { PdfPageView } from './PdfPageView';
+import { SAMPLE_DOCUMENTS } from '../data/sampleDocuments';
 
 interface ReaderViewProps {
   document: ResearchDocument | null;
@@ -33,6 +37,9 @@ interface ReaderViewProps {
   } | null) => void;
   onOpenCitationInspector: (citationId?: string) => void;
   onOpenDocumentPicker: () => void;
+  onSelectDocument?: (doc: ResearchDocument) => void;
+  onOpenRepository?: () => void;
+  allRepositoryCitationsCount?: number;
   jumpHistory?: { previousPage: number; citationId?: string; quoteText?: string } | null;
   onResumePreviousPosition?: () => void;
   targetHighlightQuote?: string | null;
@@ -47,6 +54,9 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   onTextSelected,
   onOpenCitationInspector,
   onOpenDocumentPicker,
+  onSelectDocument,
+  onOpenRepository,
+  allRepositoryCitationsCount = 0,
   jumpHistory,
   onResumePreviousPosition,
   targetHighlightQuote,
@@ -121,26 +131,89 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   if (!document) {
     return (
-      <div className={`flex-1 flex flex-col items-center justify-center p-8 transition-colors duration-150 ${theme.readerCanvasBg} ${theme.rootText}`}>
-        <div className={`max-w-lg w-full p-8 rounded border text-center ${theme.cardBg} ${theme.cardBorder} space-y-5 shadow-sm`}>
-          <div className={`w-12 h-12 mx-auto rounded ${theme.btnPrimary} flex items-center justify-center shadow-xs`}>
-            <Quote className="w-6 h-6" />
+      <div className={`flex-1 flex flex-col items-center justify-center p-6 sm:p-10 overflow-y-auto transition-colors duration-150 ${theme.readerCanvasBg} ${theme.rootText}`}>
+        <div className={`max-w-2xl w-full p-6 sm:p-8 rounded-lg border text-center ${theme.cardBg} ${theme.cardBorder} space-y-6 shadow-sm`}>
+          <div className={`w-14 h-14 mx-auto rounded-lg ${theme.btnPrimary} flex items-center justify-center shadow-xs`}>
+            <Quote className="w-7 h-7" />
           </div>
+          
           <div className="space-y-2">
-            <h2 className={`text-xl font-bold font-serif-scholarly ${theme.sheetHeading}`}>
+            <h2 className={`text-2xl font-bold font-serif-scholarly ${theme.sheetHeading}`}>
               Citations Made Easy
             </h2>
-            <p className={`text-xs ${theme.sheetMuted} leading-relaxed`}>
+            <p className={`text-xs sm:text-sm ${theme.sheetMuted} max-w-lg mx-auto leading-relaxed`}>
               Open a PDF, EPUB, journal paper, or web article to begin reading with instant multi-style citation generation, context scanning, and reference exporting.
             </p>
           </div>
-          <button
-            onClick={onOpenDocumentPicker}
-            className={`w-full py-2.5 px-4 rounded ${theme.btnPrimary} font-bold text-xs transition shadow-xs flex items-center justify-center gap-2 cursor-pointer`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Open or Browse Research Library</span>
-          </button>
+
+          {/* Primary Action Buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+            <button
+              id="btn-opening-open-picker"
+              onClick={onOpenDocumentPicker}
+              className={`w-full sm:w-auto flex-1 py-2.5 px-5 rounded ${theme.btnPrimary} font-bold text-xs transition shadow-xs flex items-center justify-center gap-2 cursor-pointer`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Open Document or Upload File</span>
+            </button>
+
+            {onOpenRepository && (
+              <button
+                id="btn-opening-repository"
+                onClick={onOpenRepository}
+                className={`w-full sm:w-auto py-2.5 px-4 rounded border ${theme.btnSecondary} font-mono text-xs transition shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:border-amber-500/50`}
+              >
+                <Database className="w-4 h-4 text-amber-500" />
+                <span>Citations Repository {allRepositoryCitationsCount > 0 ? `(${allRepositoryCitationsCount})` : ''}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Sample Papers Quick Start */}
+          {onSelectDocument && (
+            <div className="pt-3 border-t border-black/5 dark:border-white/5 text-left space-y-3">
+              <div className="flex items-center justify-between">
+                <span className={`text-[10px] uppercase font-bold tracking-widest ${theme.sheetMuted}`}>
+                  Quick Launch Sample Research Papers
+                </span>
+                <span className={`text-[10px] font-mono ${theme.sheetMuted}`}>1-Click Load</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {SAMPLE_DOCUMENTS.map((sample) => (
+                  <button
+                    key={sample.id}
+                    onClick={() => onSelectDocument(sample)}
+                    className={`p-3 rounded border text-left transition group cursor-pointer flex flex-col justify-between gap-2 ${theme.badgeBg} ${theme.badgeBorder} hover:${theme.sheetHighlightBorder} hover:shadow-2xs`}
+                  >
+                    <div>
+                      <span className="text-[9px] uppercase font-bold font-mono text-amber-500 block mb-1">
+                        {sample.fileType.toUpperCase()} • {sample.publicationYear}
+                      </span>
+                      <h4 className={`text-xs font-semibold font-serif-scholarly line-clamp-2 leading-snug group-hover:text-amber-500 transition-colors ${theme.sheetHeading}`}>
+                        {sample.title}
+                      </h4>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] font-mono opacity-70 mt-1">
+                      <span className="truncate max-w-[100px]">{sample.authors[0]}</span>
+                      <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Helpful keyboard shortcut hints */}
+          <div className="pt-2 text-[11px] font-mono opacity-60 flex flex-wrap items-center justify-center gap-3">
+            <span>[O] Open Library</span>
+            <span>•</span>
+            <span>[W] Close Active Doc</span>
+            <span>•</span>
+            <span>[R] Repository</span>
+            <span>•</span>
+            <span>[?] Shortcuts</span>
+          </div>
         </div>
       </div>
     );

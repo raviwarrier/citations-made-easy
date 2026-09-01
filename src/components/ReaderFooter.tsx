@@ -8,6 +8,7 @@ interface ReaderFooterProps {
   onOpenExportModal?: () => void;
   onToggleMetadata?: () => void;
   citationCount?: number;
+  hasActiveDoc?: boolean;
   theme?: ReadingTheme;
 }
 
@@ -16,6 +17,7 @@ export const ReaderFooter: React.FC<ReaderFooterProps> = ({
   onOpenExportModal,
   onToggleMetadata,
   citationCount = 0,
+  hasActiveDoc = false,
   theme = 'sepia',
 }) => {
   const currentTheme = THEMES[theme] || THEMES.sepia;
@@ -31,6 +33,13 @@ export const ReaderFooter: React.FC<ReaderFooterProps> = ({
           <Keyboard className="w-3.5 h-3.5" />
           Shortcuts:
         </span>
+
+        {hasActiveDoc && (
+          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] sm:text-xs">
+            <kbd className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${currentTheme.badgeBg} ${currentTheme.badgeBorder} ${currentTheme.badgeText}`}>W</kbd>
+            <span>Close</span>
+          </span>
+        )}
 
         <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs">
           <kbd className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${currentTheme.badgeBg} ${currentTheme.badgeBorder} ${currentTheme.badgeText}`}>E</kbd>

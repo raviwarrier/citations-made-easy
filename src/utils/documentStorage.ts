@@ -137,6 +137,27 @@ export async function loadActiveDocumentSession(): Promise<{
 }
 
 /**
+ * Clear the active document session from storage (returns to opening screen)
+ */
+export async function clearActiveDocumentSession(): Promise<void> {
+  try {
+    localStorage.removeItem(ACTIVE_PAGE_KEY);
+    localStorage.removeItem('scholarread_last_active_fingerprint');
+    const db = await openDB();
+    const tx = db.transaction(STORE_STATE, 'readwrite');
+    const store = tx.objectStore(STORE_STATE);
+    store.delete(ACTIVE_DOC_KEY);
+    store.delete('active_page');
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.warn('Failed to clear active document session:', err);
+  }
+}
+
+/**
  * Retrieve a specific document by fingerprint from IndexedDB
  */
 export async function getDocumentFromDB(

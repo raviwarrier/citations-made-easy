@@ -12,7 +12,8 @@ import {
   ChevronRight,
   ExternalLink,
   ShieldCheck,
-  FolderOpen
+  FolderOpen,
+  X
 } from 'lucide-react';
 import { CitationStyle, ReaderSettings, ResearchDocument } from '../types';
 import { THEMES } from '../utils/themeStyles';
@@ -22,6 +23,7 @@ interface DocumentMetadataSidebarProps {
   settings: ReaderSettings;
   onUpdateSettings: (settings: Partial<ReaderSettings>) => void;
   onOpenDocumentPicker: () => void;
+  onCloseDocument?: () => void;
   onOpenExportModal?: () => void;
   onClose?: () => void;
   onSaveLocalBackup?: () => void;
@@ -32,6 +34,7 @@ export const DocumentMetadataSidebar: React.FC<DocumentMetadataSidebarProps> = (
   settings,
   onUpdateSettings,
   onOpenDocumentPicker,
+  onCloseDocument,
   onOpenExportModal,
   onClose,
   onSaveLocalBackup,
@@ -129,6 +132,20 @@ export const DocumentMetadataSidebar: React.FC<DocumentMetadataSidebarProps> = (
                 <p className={`font-mono text-[10px] truncate ${theme.sidebarMuted}`} title={document.doi}>
                   {document.doi}
                 </p>
+              </div>
+            )}
+
+            {onCloseDocument && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={onCloseDocument}
+                  className={`w-full py-1.5 px-3 rounded border text-xs font-mono transition flex items-center justify-center gap-1.5 cursor-pointer ${theme.btnSecondary} hover:bg-red-500/10 hover:text-red-400 hover:border-red-400/50 shadow-2xs`}
+                  title="Close this document and return to the opening screen"
+                >
+                  <X className="w-3.5 h-3.5 text-red-400" />
+                  <span>Close Document</span>
+                </button>
               </div>
             )}
           </div>
