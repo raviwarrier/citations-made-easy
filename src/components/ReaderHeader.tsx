@@ -10,7 +10,8 @@ import {
   ChevronRight,
   HelpCircle,
   Download,
-  Sidebar
+  Sidebar,
+  Database
 } from 'lucide-react';
 import { FontChoice, ReadingTheme, ReaderSettings, ResearchDocument } from '../types';
 import { THEMES } from '../utils/themeStyles';
@@ -20,6 +21,7 @@ interface ReaderHeaderProps {
   settings: ReaderSettings;
   onUpdateSettings: (settings: Partial<ReaderSettings>) => void;
   onOpenDocumentPicker: () => void;
+  onOpenRepository?: () => void;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
   onToggleMetaSidebar?: () => void;
@@ -27,10 +29,10 @@ interface ReaderHeaderProps {
   citationCount: number;
   onOpenShortcuts: () => void;
   onOpenExportModal: () => void;
-  currentPage: number;
-  totalPages: number;
-  onNextPage: () => void;
-  onPrevPage: () => void;
+  currentPage?: number;
+  totalPages?: number;
+  onNextPage?: () => void;
+  onPrevPage?: () => void;
 }
 
 export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
@@ -38,6 +40,7 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
   settings,
   onUpdateSettings,
   onOpenDocumentPicker,
+  onOpenRepository,
   onToggleSidebar,
   isSidebarOpen,
   onToggleMetaSidebar,
@@ -45,10 +48,6 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
   citationCount,
   onOpenShortcuts,
   onOpenExportModal,
-  currentPage,
-  totalPages,
-  onNextPage,
-  onPrevPage,
 }) => {
   const theme = THEMES[settings.theme] || THEMES.sepia;
 
@@ -62,19 +61,18 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
         <button
           id="btn-open-doc-picker"
           onClick={onOpenDocumentPicker}
-          className={`${theme.btnPrimary} px-2 sm:px-2.5 py-1 text-xs font-bold tracking-wider sm:tracking-widest uppercase transition rounded flex items-center gap-1.5 shadow-2xs cursor-pointer shrink-0`}
-          title="Open or Upload Document (O)"
+          className={`${theme.btnPrimary} px-3 py-1.5 text-xs font-bold tracking-wider uppercase transition rounded flex items-center gap-1.5 shadow-2xs cursor-pointer shrink-0`}
+          title="Start Research / Open Document (O)"
         >
           <BookOpen className="w-3.5 h-3.5" />
-          <span className="hidden xs:inline">Citations Made Easy</span>
-          <span className="xs:hidden">Open</span>
+          <span>Start</span>
         </button>
 
         {/* Toggle Metadata Sidebar (Accessible on mobile & desktop) */}
         {onToggleMetaSidebar && (
           <button
             onClick={onToggleMetaSidebar}
-            className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono border transition shrink-0 ${
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-mono border transition shrink-0 ${
               isMetaSidebarOpen
                 ? `${theme.cardBg} ${theme.cardSelectedBorder} font-bold shadow-2xs`
                 : `${theme.headerBorder} hover:opacity-80 ${theme.headerMuted}`
@@ -86,42 +84,28 @@ export const ReaderHeader: React.FC<ReaderHeaderProps> = ({
           </button>
         )}
 
+        {/* Citations Repository Fullscreen Button */}
+        {onOpenRepository && (
+          <button
+            id="btn-open-repository"
+            onClick={onOpenRepository}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-mono font-medium border transition shrink-0 cursor-pointer ${theme.btnSecondary} hover:${theme.btnSecondaryHover} ${theme.headerText}`}
+            title="Open Citations Repository"
+          >
+            <Database className="w-3.5 h-3.5 text-amber-500" />
+            <span>Repository</span>
+          </button>
+        )}
+
         {document && (
           <h1 
-            className="text-xs md:text-sm font-medium truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[240px] md:max-w-[340px] italic opacity-90 hidden sm:block"
+            className="text-xs md:text-sm font-medium truncate max-w-[140px] xs:max-w-[200px] sm:max-w-[320px] md:max-w-[460px] italic opacity-90 hidden sm:block ml-1"
             title={document.title}
           >
             {document.title}
           </h1>
         )}
       </div>
-
-      {/* Middle section: Page Navigation */}
-      {document && totalPages > 0 && (
-        <div className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded border text-xs shadow-2xs ${theme.cardBg} ${theme.cardBorder} ${theme.cardText}`}>
-          <button
-            id="btn-prev-page"
-            onClick={onPrevPage}
-            disabled={currentPage <= 1}
-            className="p-1 rounded hover:opacity-75 disabled:opacity-30 disabled:cursor-not-allowed transition"
-            title="Previous Page (J / Left Arrow)"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-          <span className="font-mono text-[11px] px-1 font-semibold">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            id="btn-next-page"
-            onClick={onNextPage}
-            disabled={currentPage >= totalPages}
-            className="p-1 rounded hover:opacity-75 disabled:opacity-30 disabled:cursor-not-allowed transition"
-            title="Next Page (K / Right Arrow)"
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
 
       {/* Right section: 4-Way Theme Selector & Action Badges */}
       <div className="flex items-center gap-2 sm:gap-3 md:gap-4">

@@ -32,9 +32,10 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({
     {
       title: 'Citation & Extraction',
       shortcuts: [
-        { keys: ['E'], desc: 'Extract selected text into Citation Manager' },
+        { keys: ['E'], desc: 'Extract selection & open Post-It note capture' },
         { keys: ['C'], desc: 'Quick-copy formatted citation of selected text' },
         { keys: ['S'], desc: 'Capture surrounding context & detect secondary/third-party authors' },
+        { keys: ['R'], desc: 'Open full-screen SQLite Citations Repository & Viewer' },
         { keys: ['B'], desc: 'Toggle Citations & Reference Manager Drawer' },
         { keys: ['?'], desc: 'Show this Keyboard Shortcuts cheat sheet' },
         { keys: ['Esc'], desc: 'Close open dialogs or clear active text selection' },

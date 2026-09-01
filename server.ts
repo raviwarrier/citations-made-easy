@@ -1,12 +1,82 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
+import initSqlJs, { Database } from 'sql.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(express.json({ limit: '10mb' }));
+
+// SQLite Database Setup (Persistent server file citations.db)
+const DB_FILE_PATH = path.join(process.cwd(), 'citations.db');
+let serverDb: Database | null = null;
+
+async function initServerDatabase(): Promise<Database> {
+  if (serverDb) return serverDb;
+  const SQL = await initSqlJs();
+  let db: Database;
+  if (fs.existsSync(DB_FILE_PATH)) {
+    try {
+      const fileBuffer = fs.readFileSync(DB_FILE_PATH);
+      db = new SQL.Database(fileBuffer);
+    } catch {
+      db = new SQL.Database();
+    }
+  } else {
+    db = new SQL.Database();
+  }
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS citations (
+      id TEXT PRIMARY KEY,
+      docFingerprint TEXT NOT NULL,
+      docTitle TEXT NOT NULL,
+      quoteText TEXT NOT NULL,
+      pageNumber INTEGER NOT NULL,
+      pageNumberDisplay TEXT,
+      chapterName TEXT,
+      sectionName TEXT,
+      authors TEXT NOT NULL,
+      publicationYear TEXT,
+      publicationDate TEXT,
+      sourceOrPublisher TEXT,
+      journalOrBookTitle TEXT,
+      volume TEXT,
+      issue TEXT,
+      edition TEXT,
+      instituteOrOrg TEXT,
+      doi TEXT,
+      url TEXT,
+      isbn TEXT,
+      arxivId TEXT,
+      contextBefore TEXT,
+      contextAfter TEXT,
+      thirdPartyAttribution TEXT,
+      tags TEXT,
+      userNote TEXT,
+      createdAt INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_citations_doc ON citations(docFingerprint);
+    CREATE INDEX IF NOT EXISTS idx_citations_created ON citations(createdAt);
+  `);
+
+  serverDb = db;
+  return db;
+}
+
+function saveServerDatabase(): void {
+  if (!serverDb) return;
+  try {
+    const data = serverDb.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(DB_FILE_PATH, buffer);
+  } catch (err) {
+    console.error('Failed to save SQLite DB file to disk:', err);
+  }
+}
 
 /**
  * Basic robots.txt parser according to standard Robot Exclusion Protocol
@@ -380,12 +450,177 @@ app.post('/api/fetch-url', async (req, res) => {
   }
 });
 
+// SQLite Citations API Routes
+app.get('/api/citations', async (req, res) => {
+  try {
+    const db = await initServerDatabase();
+    const { docFingerprint, tag, keyword } = req.query;
+
+    let query = 'SELECT * FROM citations WHERE 1=1';
+    const params: any[] = [];
+
+    if (docFingerprint && typeof docFingerprint === 'string') {
+      query += ' AND docFingerprint = ?';
+      params.push(docFingerprint);
+    }
+    if (tag && typeof tag === 'string') {
+      query += ' AND tags LIKE ?';
+      params.push(`%"${tag}"%`);
+    }
+    if (keyword && typeof keyword === 'string') {
+      query += ' AND (quoteText LIKE ? OR userNote LIKE ? OR docTitle LIKE ? OR authors LIKE ?)';
+      const kw = `%${keyword}%`;
+      params.push(kw, kw, kw, kw);
+    }
+
+    query += ' ORDER BY createdAt DESC';
+
+    const stmt = db.prepare(query);
+    stmt.bind(params);
+    const results: any[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      let authors = [];
+      let tags = [];
+      let thirdPartyAttribution = undefined;
+      try { authors = JSON.parse(String(row.authors || '[]')); } catch {}
+      try { tags = JSON.parse(String(row.tags || '[]')); } catch {}
+      try { if (row.thirdPartyAttribution) thirdPartyAttribution = JSON.parse(String(row.thirdPartyAttribution)); } catch {}
+
+      results.push({
+        ...row,
+        authors,
+        tags,
+        thirdPartyAttribution,
+      });
+    }
+    stmt.free();
+
+    return res.json({ success: true, citations: results });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Database query failed.' });
+  }
+});
+
+app.post('/api/citations', async (req, res) => {
+  try {
+    const db = await initServerDatabase();
+    const c = req.body;
+    if (!c || !c.id || !c.docFingerprint) {
+      return res.status(400).json({ success: false, error: 'Invalid citation object' });
+    }
+
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO citations (
+        id, docFingerprint, docTitle, quoteText, pageNumber, pageNumberDisplay,
+        chapterName, sectionName, authors, publicationYear, publicationDate,
+        sourceOrPublisher, journalOrBookTitle, volume, issue, edition,
+        instituteOrOrg, doi, url, isbn, arxivId,
+        contextBefore, contextAfter, thirdPartyAttribution, tags, userNote, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run([
+      c.id,
+      c.docFingerprint,
+      c.docTitle,
+      c.quoteText,
+      c.pageNumber,
+      c.pageNumberDisplay || null,
+      c.chapterName || null,
+      c.sectionName || null,
+      JSON.stringify(c.authors || []),
+      c.publicationYear || '',
+      c.publicationDate || null,
+      c.sourceOrPublisher || '',
+      c.journalOrBookTitle || null,
+      c.volume || null,
+      c.issue || null,
+      c.edition || null,
+      c.instituteOrOrg || null,
+      c.doi || null,
+      c.url || null,
+      c.isbn || null,
+      c.arxivId || null,
+      c.contextBefore || null,
+      c.contextAfter || null,
+      c.thirdPartyAttribution ? JSON.stringify(c.thirdPartyAttribution) : null,
+      JSON.stringify(c.tags || []),
+      c.userNote || null,
+      c.createdAt || Date.now(),
+    ]);
+
+    stmt.free();
+    saveServerDatabase();
+
+    return res.json({ success: true, id: c.id });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to save citation' });
+  }
+});
+
+app.delete('/api/citations/:id', async (req, res) => {
+  try {
+    const db = await initServerDatabase();
+    const { id } = req.params;
+    db.run('DELETE FROM citations WHERE id = ?', [id]);
+    saveServerDatabase();
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+// Sources summary route (Grouped by paper/article/website/book)
+app.get('/api/sources', async (req, res) => {
+  try {
+    const db = await initServerDatabase();
+    const resSummary = db.exec(`
+      SELECT docFingerprint, docTitle, authors, publicationYear, sourceOrPublisher, COUNT(*) as count
+      FROM citations
+      GROUP BY docFingerprint
+      ORDER BY MAX(createdAt) DESC
+    `);
+
+    const sources = (resSummary[0]?.values || []).map((row) => {
+      let authors: string[] = [];
+      try { authors = JSON.parse(String(row[2] || '[]')); } catch { authors = [String(row[2])]; }
+      return {
+        fingerprint: String(row[0]),
+        title: String(row[1]),
+        authors,
+        year: String(row[3] || ''),
+        sourceOrPublisher: String(row[4] || ''),
+        citationCount: Number(row[5]),
+      };
+    });
+
+    return res.json({ success: true, sources });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+// Download full SQLite binary database file
+app.get('/api/export/sqlite', async (req, res) => {
+  try {
+    const db = await initServerDatabase();
+    const data = db.export();
+    res.setHeader('Content-Type', 'application/x-sqlite3');
+    res.setHeader('Content-Disposition', 'attachment; filename="citations-repository.sqlite"');
+    return res.send(Buffer.from(data));
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
 // API health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
 async function startServer() {
+  await initServerDatabase();
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

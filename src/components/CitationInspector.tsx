@@ -56,11 +56,27 @@ export const CitationInspector: React.FC<CitationInspectorProps> = ({
 
   const filteredCitations = citations.filter((c) => {
     if (!filterQuery) return true;
-    const q = filterQuery.toLowerCase();
+    const q = filterQuery.toLowerCase().trim();
+    const authors = (c.authors || []).join(' ').toLowerCase();
+    const tags = (c.tags || []).join(' ').toLowerCase();
+    const title = (c.docTitle || '').toLowerCase();
+    const source = (c.sourceOrPublisher || '').toLowerCase();
+    const journal = (c.journalOrBookTitle || '').toLowerCase();
+    const year = (c.publicationYear || '').toLowerCase();
+    const doi = (c.doi || '').toLowerCase();
+    const chapter = (c.chapterName || '').toLowerCase();
+
     return (
       c.quoteText.toLowerCase().includes(q) ||
       (c.userNote && c.userNote.toLowerCase().includes(q)) ||
-      c.tags?.some((t) => t.toLowerCase().includes(q)) ||
+      tags.includes(q) ||
+      authors.includes(q) ||
+      title.includes(q) ||
+      source.includes(q) ||
+      journal.includes(q) ||
+      year.includes(q) ||
+      doi.includes(q) ||
+      chapter.includes(q) ||
       (c.thirdPartyAttribution?.detectedAuthor &&
         c.thirdPartyAttribution.detectedAuthor.toLowerCase().includes(q))
     );
@@ -90,15 +106,6 @@ export const CitationInspector: React.FC<CitationInspectorProps> = ({
     setCopyAllStatus(true);
     setTimeout(() => setCopyAllStatus(false), 2000);
   };
-
-  const citationStyles: Array<{ id: CitationStyle; label: string }> = [
-    { id: 'apa', label: 'APA' },
-    { id: 'mla', label: 'MLA' },
-    { id: 'chicago-author-date', label: 'Chicago' },
-    { id: 'harvard', label: 'Harvard' },
-    { id: 'ieee', label: 'IEEE' },
-    { id: 'bibtex', label: 'BibTeX' },
-  ];
 
   return (
     <>
@@ -133,25 +140,28 @@ export const CitationInspector: React.FC<CitationInspectorProps> = ({
         </button>
       </div>
 
-      {/* Citation Style Quick Switch Ribbon */}
+      {/* Citation Style Dropdown Ribbon */}
       <div className={`px-4 py-2.5 border-b shrink-0 flex flex-col gap-1.5 ${theme.sidebarBorder} ${theme.sidebarSubtleHeaderBg}`}>
-        <span className={`text-[9px] uppercase tracking-widest font-bold shrink-0 ${theme.sidebarMuted}`}>
-          Format:
-        </span>
-        <div className="flex flex-wrap gap-1">
-          {citationStyles.map((style) => (
-            <button
-              key={style.id}
-              onClick={() => onUpdateSettings({ citationStyle: style.id })}
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition cursor-pointer ${
-                settings.citationStyle === style.id
-                  ? `${theme.btnPrimary} shadow-2xs`
-                  : `${theme.cardBg} ${theme.sidebarMuted} border ${theme.sidebarBorder} hover:${theme.sidebarText}`
-              }`}
-            >
-              {style.label}
-            </button>
-          ))}
+        <label className={`text-[9px] uppercase tracking-widest font-bold shrink-0 ${theme.sidebarMuted}`}>
+          Citation Style:
+        </label>
+        <div className="relative">
+          <select
+            value={settings.citationStyle}
+            onChange={(e) => onUpdateSettings({ citationStyle: e.target.value as CitationStyle })}
+            className={`w-full border rounded px-2.5 py-1.5 text-xs appearance-none cursor-pointer font-medium focus:outline-none shadow-2xs ${theme.inputBg} ${theme.inputBorder} ${theme.inputText}`}
+          >
+            <option value="apa">APA (7th Edition)</option>
+            <option value="mla">MLA (9th Edition)</option>
+            <option value="chicago-author-date">Chicago (17th Author-Date)</option>
+            <option value="chicago-notes">Chicago (Notes & Bibliography)</option>
+            <option value="harvard">Harvard Standard</option>
+            <option value="ieee">IEEE Numbered</option>
+            <option value="bibtex">BibTeX Academic</option>
+          </select>
+          <div className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] ${theme.sidebarMuted}`}>
+            ▼
+          </div>
         </div>
       </div>
 
@@ -161,7 +171,7 @@ export const CitationInspector: React.FC<CitationInspectorProps> = ({
           <Search className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${theme.sidebarMuted}`} />
           <input
             type="text"
-            placeholder="Search quotations, authors, tags..."
+            placeholder="Search quotes, notes, tags, authors, metadata..."
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
             className={`w-full pl-8 pr-6 py-1.5 rounded border text-xs focus:outline-none font-sans ${theme.inputBg} ${theme.inputBorder} ${theme.inputText} ${theme.inputPlaceholder}`}
@@ -291,11 +301,16 @@ export const CitationInspector: React.FC<CitationInspectorProps> = ({
                   </div>
                 </div>
 
-                {/* Notes & Tags */}
+                {/* Post-It Note embedded snippet */}
                 {citation.userNote && (
-                  <p className={`text-[10px] italic p-1.5 rounded ${theme.sidebarSubtleHeaderBg} ${theme.sidebarMuted}`}>
-                    Note: {citation.userNote}
-                  </p>
+                  <div className="bg-[#fcfaf4] text-[#1c1917] p-2.5 rounded-sm border border-stone-200 border-l-3 border-l-amber-500 shadow-2xs space-y-1 select-text">
+                    <span className="text-[10px] font-bold font-mono uppercase text-stone-700 flex items-center gap-1">
+                      📌 Note:
+                    </span>
+                    <p className="text-xs font-sans leading-relaxed text-stone-900">
+                      {citation.userNote}
+                    </p>
+                  </div>
                 )}
 
                 {citation.tags && citation.tags.length > 0 && (

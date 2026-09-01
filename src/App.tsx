@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   CitationEntry, 
   CitationStyle, 
@@ -18,6 +18,7 @@ import {
   saveActiveDocumentSession, 
   saveActivePagePosition 
 } from './utils/documentStorage';
+import { querySqliteCitations, saveCitationToSqlite, deleteCitationFromSqlite } from './utils/sqliteDb';
 
 import { ReaderHeader } from './components/ReaderHeader';
 import { ReaderView } from './components/ReaderView';
@@ -29,20 +30,25 @@ import { DocumentPickerModal } from './components/DocumentPickerModal';
 import { ExportModal } from './components/ExportModal';
 import { EditCitationModal } from './components/EditCitationModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
-import { LocalBackupBanner } from './components/LocalBackupBanner';
 import { MobileNoticeBanner } from './components/MobileNoticeBanner';
+import { PostItNoteModal } from './components/PostItNoteModal';
+import { CitationsRepositoryView } from './components/CitationsRepositoryView';
 
 export default function App() {
-  // 1. Settings state
+  // 1. Settings state (Default dark mode onyx)
   const [settings, setSettings] = useState<ReaderSettings>(loadUserSettings);
 
-  // 2. Active Document & Page state
+  // 2. Active Document & Page state (Opens blank on startup)
   const [activeDocument, setActiveDocument] = useState<ResearchDocument | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isSessionLoaded, setIsSessionLoaded] = useState<boolean>(false);
 
   // 3. Document Citations state (auto-loaded per document fingerprint)
   const [citations, setCitations] = useState<CitationEntry[]>([]);
+
+  // 3b. SQLite Full Repository Citations (Across all papers/articles/books)
+  const [allRepositoryCitations, setAllRepositoryCitations] = useState<CitationEntry[]>([]);
+  const [isRepositoryOpen, setIsRepositoryOpen] = useState<boolean>(false);
 
   // 4. Modals & Sidebars (auto-collapsed on mobile by default to maximize reader space)
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
@@ -72,6 +78,16 @@ export default function App() {
     boundingRect: DOMRect;
   } | null>(null);
 
+  // 5b. Pending citation extraction for Pastel Yellow Post-It Note capture
+  const [pendingPostItData, setPendingPostItData] = useState<{
+    text: string;
+    pageNumber: number;
+    chapterTitle?: string;
+    contextBefore?: string;
+    contextAfter?: string;
+    attribution?: any;
+  } | null>(null);
+
   const [isCopiedToast, setIsCopiedToast] = useState(false);
   const [toastNotification, setToastNotification] = useState<string | null>(null);
 
@@ -80,6 +96,16 @@ export default function App() {
     setToastNotification(message);
     setTimeout(() => setToastNotification(null), 3000);
   };
+
+  // Load all citations from SQLite repository
+  const refreshRepositoryCitations = useCallback(async () => {
+    try {
+      const all = await querySqliteCitations();
+      setAllRepositoryCitations(all);
+    } catch (err) {
+      console.warn('Failed to query SQLite repository:', err);
+    }
+  }, []);
 
   // Update & Persist Settings
   const handleUpdateSettings = useCallback((newSettings: Partial<ReaderSettings>) => {
@@ -90,9 +116,9 @@ export default function App() {
     });
   }, []);
 
-  // Cycle Reading Theme (Paper -> Sepia -> Slate -> Onyx)
+  // Cycle Reading Theme (Onyx -> Slate -> Paper -> Sepia)
   const cycleTheme = useCallback(() => {
-    const themes: ReadingTheme[] = ['paper', 'sepia', 'slate', 'onyx'];
+    const themes: ReadingTheme[] = ['onyx', 'slate', 'paper', 'sepia'];
     const nextIdx = (themes.indexOf(settings.theme) + 1) % themes.length;
     handleUpdateSettings({ theme: themes[nextIdx] });
     showToast(`Switched theme: ${themes[nextIdx].toUpperCase()}`);
@@ -104,15 +130,19 @@ export default function App() {
     saveActivePagePosition(newPage);
   }, []);
 
-  // Restore last active document and reading position on application startup
+  // Initialize on startup: Open Blank (Requirement 4) & Load SQLite Repository
   useEffect(() => {
     let isMounted = true;
 
     async function initSession() {
       try {
+        // Refresh SQLite Citations
+        await refreshRepositoryCitations();
+
         const savedSession = await loadActiveDocumentSession();
         if (!isMounted) return;
 
+        // If user previously opened a document, restore it; otherwise open blank
         if (savedSession && savedSession.document) {
           const doc = savedSession.document;
           if (doc.fileType === 'pdf' && !doc.rawArrayBuffer) {
@@ -125,23 +155,13 @@ export default function App() {
           setActiveDocument(doc);
           setCurrentPage(savedSession.pageNumber || 1);
         } else {
-          // Fallback to sample document for first-time visitors
-          const sampleDoc = SAMPLE_DOCUMENTS[0];
-          if (sampleDoc && sampleDoc.fileType === 'pdf' && !sampleDoc.rawArrayBuffer) {
-            try {
-              sampleDoc.rawArrayBuffer = generateSamplePdfBuffer(sampleDoc);
-            } catch {
-              // ignore
-            }
-          }
-          setActiveDocument(sampleDoc);
+          // Open blank on startup (Requirement 4)
+          setActiveDocument(null);
           setCurrentPage(1);
-          saveActiveDocumentSession(sampleDoc, 1);
         }
       } catch (err) {
         console.warn('Session init error:', err);
-        const fallback = SAMPLE_DOCUMENTS[0];
-        setActiveDocument(fallback);
+        setActiveDocument(null);
       } finally {
         if (isMounted) setIsSessionLoaded(true);
       }
@@ -152,11 +172,14 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [refreshRepositoryCitations]);
 
   // Load document citations upon changing active document
   useEffect(() => {
-    if (!activeDocument) return;
+    if (!activeDocument) {
+      setCitations([]);
+      return;
+    }
 
     // Record document in recent history
     recordRecentDoc({
@@ -168,17 +191,7 @@ export default function App() {
     });
 
     // Check local storage for existing citations for this specific document
-    let docCitations = loadDocCitations(activeDocument.fingerprint);
-
-    // If initial sample paper with no citations yet, seed initial ones for demo
-    if (
-      docCitations.length === 0 &&
-      activeDocument.fingerprint === 'sample_quantum_2024_hash'
-    ) {
-      docCitations = SAMPLE_INITIAL_CITATIONS;
-      docCitations.forEach((c) => appendDocCitation(c));
-    }
-
+    const docCitations = loadDocCitations(activeDocument.fingerprint);
     setCitations(docCitations);
     setSelectionData(null);
   }, [activeDocument]);
@@ -197,15 +210,30 @@ export default function App() {
     saveActiveDocumentSession(doc, targetPage);
   };
 
-  // Extract selected text into citation entry (Core Feature 1 & 2 & 3)
+  // Trigger Citation Capture: Opens Pastel Yellow Post-It Note (Requirement 2)
   const handleExtractSelection = useCallback(() => {
     if (!selectionData || !activeDocument) return;
 
     const { text, pageNumber, chapterTitle } = selectionData;
-
-    // Scan full page / document text around selection for prior/succeeding context & 3rd party authors
     const fullPageText = activeDocument.pages[pageNumber - 1]?.text || text;
     const scanResult = scanSelectionContext(fullPageText, text);
+
+    // Show Post-It Note capture overlay
+    setPendingPostItData({
+      text,
+      pageNumber,
+      chapterTitle: chapterTitle || activeDocument.chapterName,
+      contextBefore: scanResult.contextBefore,
+      contextAfter: scanResult.contextAfter,
+      attribution: scanResult.attribution,
+    });
+  }, [selectionData, activeDocument]);
+
+  // Confirm Save from Pastel Yellow Post-It Note (Pins to SQLite DB & local state)
+  const handleConfirmPostItSave = (userNote: string, tags: string[]) => {
+    if (!pendingPostItData || !activeDocument) return;
+
+    const { text, pageNumber, chapterTitle, contextBefore, contextAfter, attribution } = pendingPostItData;
 
     const newCitation: CitationEntry = {
       id: `cite_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -228,29 +256,34 @@ export default function App() {
       url: activeDocument.url,
       isbn: activeDocument.isbn,
       arxivId: activeDocument.arxivId,
-      contextBefore: scanResult.contextBefore,
-      contextAfter: scanResult.contextAfter,
-      thirdPartyAttribution: scanResult.attribution,
-      tags: [],
+      contextBefore,
+      contextAfter,
+      thirdPartyAttribution: attribution,
+      tags: tags || [],
+      userNote: userNote || undefined,
       createdAt: Date.now(),
     };
 
-    // Append and persist locally
+    // Append to document citations and save to SQLite
     const updated = appendDocCitation(newCitation);
     setCitations(updated);
     setSelectedCitationId(newCitation.id);
     setIsSidebarOpen(true);
     setSelectionData(null);
+    setPendingPostItData(null);
+
+    // Refresh repository citations list
+    refreshRepositoryCitations();
 
     // Clear browser selection
     window.getSelection()?.removeAllRanges();
 
-    if (scanResult.attribution.isThirdPartyQuote && scanResult.attribution.detectedAuthor) {
-      showToast(`Extracted citation! Detected: ${scanResult.attribution.detectedAuthor}`);
+    if (attribution?.isThirdPartyQuote && attribution.detectedAuthor) {
+      showToast(`Citation pinned to SQLite! Detected: ${attribution.detectedAuthor}`);
     } else {
-      showToast(`Citation extracted from Page ${pageNumber}!`);
+      showToast(`Citation & Post-It pinned to SQLite DB! (Page ${pageNumber})`);
     }
-  }, [selectionData, activeDocument]);
+  };
 
   // Quick Copy formatted citation of selection
   const handleQuickCopySelection = useCallback(() => {
@@ -296,24 +329,31 @@ export default function App() {
     } else {
       showToast(`Captured context: ${scanResult.contextBefore ? 'Saved surrounding sentences.' : 'Direct primary source quote.'}`);
     }
-    // Now extract with scanned metadata
+    // Open Post-It note with context attached
     handleExtractSelection();
   }, [selectionData, activeDocument, handleExtractSelection]);
 
   // Delete citation
-  const handleDeleteCitation = (id: string) => {
-    if (!activeDocument) return;
-    const updated = deleteDocCitation(activeDocument.fingerprint, id);
-    setCitations(updated);
+  const handleDeleteCitation = (id: string, fingerprint?: string) => {
+    const docFp = fingerprint || activeDocument?.fingerprint;
+    if (!docFp) return;
+    const updated = deleteDocCitation(docFp, id);
+    if (activeDocument && activeDocument.fingerprint === docFp) {
+      setCitations(updated);
+    }
     if (selectedCitationId === id) setSelectedCitationId(null);
-    showToast('Citation deleted.');
+    refreshRepositoryCitations();
+    showToast('Citation deleted from SQLite database.');
   };
 
   // Save edited citation
   const handleSaveEditedCitation = (updated: CitationEntry) => {
     const list = appendDocCitation(updated);
-    setCitations(list);
-    showToast('Citation updated successfully.');
+    if (activeDocument && activeDocument.fingerprint === updated.docFingerprint) {
+      setCitations(list);
+    }
+    refreshRepositoryCitations();
+    showToast('Citation & notes updated in SQLite DB.');
   };
 
   // Jump to specific citation location in document
@@ -340,53 +380,86 @@ export default function App() {
     }
   };
 
+  // Open source in reader from full repository view
+  const handleOpenSourceInReader = (docFingerprint: string, pageNumber: number) => {
+    setIsRepositoryOpen(false);
+    // Find doc in sample documents or load
+    const foundDoc = SAMPLE_DOCUMENTS.find((d) => d.fingerprint === docFingerprint);
+    if (foundDoc) {
+      handleSelectDocument(foundDoc, pageNumber);
+    } else {
+      showToast(`Opening document at Page ${pageNumber}...`);
+    }
+  };
+
   // Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input/textarea
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
         if (e.key === 'Escape') {
           target.blur();
         }
         return;
       }
 
+      const isModalOpen = Boolean(
+        pendingPostItData ||
+        editingCitation ||
+        isDocPickerOpen ||
+        isExportModalOpen ||
+        isShortcutsOpen ||
+        isRepositoryOpen
+      );
+
       if (e.key === 'Escape') {
         setIsDocPickerOpen(false);
         setIsExportModalOpen(false);
         setIsShortcutsOpen(false);
+        setIsRepositoryOpen(false);
         setEditingCitation(null);
         setSelectionData(null);
+        setPendingPostItData(null);
         window.getSelection()?.removeAllRanges();
-      } else if (e.key === 'j' || e.key === 'ArrowLeft') {
-        // Previous page
+        return;
+      }
+
+      // If any modal/overlay is currently active, do not execute reader shortcuts
+      if (isModalOpen) {
+        return;
+      }
+
+      if (e.key === 'j' || e.key === 'ArrowLeft') {
         if (currentPage > 1) {
           handlePageChange(currentPage - 1);
         }
       } else if (e.key === 'k' || e.key === 'ArrowRight') {
-        // Next page
         if (activeDocument && currentPage < activeDocument.pages.length) {
           handlePageChange(currentPage + 1);
         }
       } else if (e.key === 'e' || e.key === 'E') {
-        // Extract selection
         if (selectionData) {
           e.preventDefault();
           handleExtractSelection();
         }
       } else if (e.key === 'c' || e.key === 'C') {
-        // Quick copy citation
         if (selectionData) {
           e.preventDefault();
           handleQuickCopySelection();
         }
       } else if (e.key === 's' || e.key === 'S') {
-        // Scan context
         if (selectionData) {
           e.preventDefault();
           handleScanContext();
         }
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        refreshRepositoryCitations();
+        setIsRepositoryOpen((prev) => !prev);
       } else if (e.key === 'b' || e.key === 'B') {
         e.preventDefault();
         setIsSidebarOpen((prev) => !prev);
@@ -415,28 +488,50 @@ export default function App() {
     activeDocument,
     selectionData,
     settings.focusMode,
+    pendingPostItData,
+    editingCitation,
+    isDocPickerOpen,
+    isExportModalOpen,
+    isShortcutsOpen,
+    isRepositoryOpen,
     handleExtractSelection,
     handleQuickCopySelection,
     handleScanContext,
     handleUpdateSettings,
     cycleTheme,
+    refreshRepositoryCitations,
   ]);
 
   const totalPages = activeDocument?.pages?.length || 1;
-  const currentTheme = THEMES[settings.theme] || THEMES.sepia;
+  const currentTheme = THEMES[settings.theme] || THEMES.onyx;
+
+  // Unique tags collected across all SQLite repository citations
+  const repositoryTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of allRepositoryCitations) {
+      if (c.tags && Array.isArray(c.tags)) {
+        c.tags.forEach((t) => {
+          const clean = t.trim();
+          if (clean) set.add(clean);
+        });
+      }
+    }
+    return Array.from(set);
+  }, [allRepositoryCitations]);
 
   return (
     <div className={`flex flex-col h-screen w-screen overflow-hidden ${currentTheme.rootBg} ${currentTheme.rootText} selection:bg-[#FBBF24] selection:text-[#2C2C2C] font-sans antialiased`}>
-      {/* 1. Offline Local Storage Safety Banner */}
-      <LocalBackupBanner />
-
-      {/* 2. Main Reader Header */}
+      {/* 1. Main Reader Header */}
       {!settings.focusMode && (
         <ReaderHeader
           document={activeDocument}
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
           onOpenDocumentPicker={() => setIsDocPickerOpen(true)}
+          onOpenRepository={() => {
+            refreshRepositoryCitations();
+            setIsRepositoryOpen(true);
+          }}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           isSidebarOpen={isSidebarOpen}
           onToggleMetaSidebar={() => setIsMetaSidebarOpen((prev) => !prev)}
@@ -444,10 +539,6 @@ export default function App() {
           citationCount={citations.length}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenExportModal={() => setIsExportModalOpen(true)}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onNextPage={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-          onPrevPage={() => handlePageChange(Math.max(1, currentPage - 1))}
         />
       )}
 
@@ -461,7 +552,7 @@ export default function App() {
         />
       )}
 
-      {/* 3. Main Layout: Left Metadata Drawer + Reading Canvas + Right Extracts Panel */}
+      {/* 2. Main Layout: Left Metadata Drawer + Reading Canvas + Right Extracts Panel */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Metadata & Controls Sidebar */}
         {isMetaSidebarOpen && !settings.focusMode && (
@@ -472,7 +563,6 @@ export default function App() {
             onOpenDocumentPicker={() => setIsDocPickerOpen(true)}
             onOpenExportModal={() => setIsExportModalOpen(true)}
             onClose={() => setIsMetaSidebarOpen(false)}
-            onSaveLocalBackup={() => showToast('Session and citations saved locally to browser storage.')}
           />
         )}
 
@@ -525,7 +615,7 @@ export default function App() {
             citations={citations}
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
-            onDeleteCitation={handleDeleteCitation}
+            onDeleteCitation={(id) => handleDeleteCitation(id)}
             onEditCitation={(citation) => setEditingCitation(citation)}
             onOpenExportModal={() => setIsExportModalOpen(true)}
             selectedCitationId={selectedCitationId}
@@ -534,13 +624,10 @@ export default function App() {
         )}
       </div>
 
-      {/* 4. Bottom Shortcut & Status Bar */}
+      {/* 3. Bottom Shortcut & Status Bar */}
       {!settings.focusMode && (
         <ReaderFooter
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
-          onSaveLocalBackup={() => {
-            showToast('All extracts & metadata saved to local storage!');
-          }}
           onOpenExportModal={() => setIsExportModalOpen(true)}
           onToggleMetadata={() => setIsMetaSidebarOpen((v) => !v)}
           citationCount={citations.length}
@@ -548,7 +635,38 @@ export default function App() {
         />
       )}
 
-      {/* 5. Modals */}
+      {/* 5. Modals & Version 2 Overlays */}
+
+      {/* Pastel Yellow Post-It Note for Capturing Citations, Tags, and Notes (Requirement 2) */}
+      <PostItNoteModal
+        key={pendingPostItData ? `postit-${pendingPostItData.pageNumber}-${pendingPostItData.text.slice(0, 30)}` : 'closed'}
+        isOpen={Boolean(pendingPostItData)}
+        onClose={() => setPendingPostItData(null)}
+        onSave={handleConfirmPostItSave}
+        quoteText={pendingPostItData?.text || ''}
+        pageNumber={pendingPostItData?.pageNumber || 1}
+        chapterTitle={pendingPostItData?.chapterTitle}
+        docTitle={activeDocument?.title}
+        authors={activeDocument?.authors}
+        year={activeDocument?.publicationYear}
+        suggestedTags={repositoryTags}
+        theme={settings.theme}
+      />
+
+      {/* Fullscreen Citations & SQLite Repository Viewer (Requirement 5) */}
+      {isRepositoryOpen && (
+        <CitationsRepositoryView
+          citations={allRepositoryCitations.length > 0 ? allRepositoryCitations : citations}
+          onClose={() => setIsRepositoryOpen(false)}
+          onEditCitation={(citation) => setEditingCitation(citation)}
+          onDeleteCitation={(docFp, id) => handleDeleteCitation(id, docFp)}
+          onOpenSourceInReader={handleOpenSourceInReader}
+          citationStyle={settings.citationStyle}
+          onUpdateCitationStyle={(style) => handleUpdateSettings({ citationStyle: style })}
+          theme={settings.theme}
+        />
+      )}
+
       <DocumentPickerModal
         isOpen={isDocPickerOpen}
         onClose={() => setIsDocPickerOpen(false)}

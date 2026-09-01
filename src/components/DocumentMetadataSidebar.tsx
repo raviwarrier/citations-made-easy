@@ -139,31 +139,6 @@ export const DocumentMetadataSidebar: React.FC<DocumentMetadataSidebarProps> = (
         )}
       </div>
 
-      {/* Citation Style Selector */}
-      <div>
-        <label className={`text-[10px] uppercase tracking-widest font-bold mb-2 block ${theme.sidebarMuted}`}>
-          Citation Style
-        </label>
-        <div className="relative">
-          <select
-            value={settings.citationStyle}
-            onChange={(e) => onUpdateSettings({ citationStyle: e.target.value as CitationStyle })}
-            className={`w-full border rounded p-2 text-xs appearance-none cursor-pointer font-medium focus:outline-none shadow-2xs ${theme.inputBg} ${theme.inputBorder} ${theme.inputText}`}
-          >
-            <option value="apa">APA (7th Edition)</option>
-            <option value="mla">MLA (9th Edition)</option>
-            <option value="chicago-author-date">Chicago (17th Author-Date)</option>
-            <option value="chicago-notes">Chicago (Notes & Bibliography)</option>
-            <option value="harvard">Harvard Standard</option>
-            <option value="ieee">IEEE Numbered</option>
-            <option value="bibtex">BibTeX Academic</option>
-          </select>
-          <div className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] ${theme.sidebarMuted}`}>
-            ▼
-          </div>
-        </div>
-      </div>
-
       {/* Reader Layout Controls */}
       <div>
         <label className={`text-[10px] uppercase tracking-widest font-bold mb-2 block ${theme.sidebarMuted}`}>
@@ -228,31 +203,6 @@ export const DocumentMetadataSidebar: React.FC<DocumentMetadataSidebarProps> = (
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Action Buttons & Session Footnote */}
-      <div className={`mt-auto pt-4 border-t ${theme.sidebarBorder} space-y-2`}>
-        {onSaveLocalBackup && (
-          <button
-            onClick={onSaveLocalBackup}
-            className={`w-full border py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${theme.btnSecondary}`}
-          >
-            <HardDrive className="w-3.5 h-3.5" />
-            <span>Save Local Session</span>
-          </button>
-        )}
-
-        <button
-          onClick={onOpenDocumentPicker}
-          className={`w-full border py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${theme.btnSecondary}`}
-        >
-          <FolderOpen className="w-3.5 h-3.5" />
-          <span>Start New Research</span>
-        </button>
-
-        <p className={`text-[9px] text-center pt-1 uppercase tracking-tighter ${theme.sidebarMuted}`}>
-          Data stored locally • No cloud sync
-        </p>
       </div>
     </aside>
     </>

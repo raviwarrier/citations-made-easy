@@ -1,4 +1,5 @@
 import { CitationEntry, ReaderSettings } from '../types';
+import { saveCitationToSqlite, deleteCitationFromSqlite } from './sqliteDb';
 
 const STORAGE_PREFIX = 'scholarread_citations_';
 const SETTINGS_KEY = 'scholarread_settings';
@@ -6,7 +7,7 @@ const RECENT_DOCS_KEY = 'scholarread_recent_docs';
 const BACKUP_FLAG_KEY = 'scholarread_last_backup_time';
 
 export const DEFAULT_SETTINGS: ReaderSettings = {
-  theme: 'paper',
+  theme: 'onyx',
   font: 'serif',
   fontSize: 18,
   lineHeight: 'relaxed',
@@ -69,6 +70,10 @@ export function appendDocCitation(citation: CitationEntry): CitationEntry[] {
   }
 
   saveDocCitations(citation.docFingerprint, updated);
+  
+  // Persist to SQLite DB asynchronously
+  saveCitationToSqlite(citation).catch(() => {});
+
   return updated;
 }
 
@@ -79,6 +84,10 @@ export function deleteDocCitation(fingerprint: string, citationId: string): Cita
   const existing = loadDocCitations(fingerprint);
   const updated = existing.filter((c) => c.id !== citationId);
   saveDocCitations(fingerprint, updated);
+
+  // Remove from SQLite DB
+  deleteCitationFromSqlite(citationId).catch(() => {});
+
   return updated;
 }
 
